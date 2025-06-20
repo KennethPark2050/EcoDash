@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>간편 경제 지표 대시보드 (Static Ver.)</title>
+    <title>간편 시장 지표 대시보드 (Static Ver.)</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -15,43 +15,45 @@
         <p>데이터를 불러오는 중입니다...</p>
     </div>
 
-    <!-- API 키 입력창 (Alpha Vantage 키 하나만 받도록 수정) -->
+    <!-- API 키 입력창 (Alpha Vantage 키 하나만 받도록 최종 수정) -->
     <div id="api-key-section">
         <div class="api-key-container">
             <h1>대시보드 데이터 로드</h1>
-            <p>데이터를 불러오려면 Alpha Vantage API 키를 입력해주세요.</p>
+            <!-- 설명 텍스트 수정 -->
+            <p>시장 데이터를 불러오려면 Alpha Vantage API 키를 입력해주세요.</p>
             <div class="api-input-group">
                 <label for="market-api-key">Alpha Vantage API 키</label>
                 <input type="password" id="market-api-key" placeholder="Alpha Vantage API 키를 여기에 붙여넣으세요">
                 <a href="https://www.alphavantage.co/support/#api-key" target="_blank">키 발급받기</a>
             </div>
+            <!-- 한국은행 API 키 입력 부분 삭제 -->
             <button id="load-data-btn">데이터 불러오기</button>
         </div>
     </div>
     
     <div id="dashboard-main-container" class="dashboard-container hidden">
         <header class="control-bar">
-            <div class="logo"><h1>📈 간편 경제 지표 대시보드</h1></div>
+            <div class="logo"><h1>📈 간편 시장 지표 대시보드</h1></div>
             <div class="controls">
                 <div class="control-group"><label for="date-range">기간 선택:</label><input type="text" id="date-range"></div>
                 <button id="refresh-btn">🔄 기간 적용</button>
             </div>
         </header>
 
-        <!-- KPI 카드 (ECOS 관련 카드 제거) -->
+        <!-- KPI 카드 (ECOS 관련 카드 모두 삭제) -->
         <section class="kpi-cards">
-            <div class="card" id="kpi-kospi"><div class="card-content"><p class="title">KOSPI (대용)</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div><div class="sparkline" id="sparkline-kospi"></div></div>
+            <div class="card" id="kpi-kospi"><div class="card-content"><p class="title">S&P 500 (SPY)</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div><div class="sparkline" id="sparkline-kospi"></div></div>
             <div class="card" id="kpi-usd-krw"><div class="card-content"><p class="title">USD/KRW 환율</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div><div class="sparkline" id="sparkline-usd-krw"></div></div>
         </section>
 
-        <!-- 메인 차트 (지표 토글 제거) -->
+        <!-- 메인 차트 -->
         <main class="main-chart-area full-width">
-            <div class="chart-container"><div class="chart-header"><h3>KOSPI(대용) vs USD/KRW</h3></div><div id="main-timeseries-chart" class="chart-body"></div></div>
+            <div class="chart-container"><div class="chart-header"><h3>S&P 500 (SPY) vs USD/KRW</h3></div><div id="main-timeseries-chart" class="chart-body"></div></div>
         </main>
         
         <!-- 상관관계 분석 -->
         <section class="correlation-area">
-            <div class="chart-container"><div class="chart-header"><h3>KOSPI(대용)와 환율 상관관계</h3></div><div id="scatter-plot" class="chart-body"></div></div>
+            <div class="chart-container"><div class="chart-header"><h3>S&P 500(SPY)와 환율 상관관계</h3></div><div id="scatter-plot" class="chart-body"></div></div>
         </section>
 
         <!-- 세부 데이터 테이블 -->
