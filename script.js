@@ -14,12 +14,26 @@ document.addEventListener('DOMContentLoaded', function () {
     const MAIN_CHART_INDICATORS = ['kospi', 'cpi', 'bond_10y', 'usd_krw', 'm2'];
     const SCATTER_OPTIONS = ['kospi', 'usd_krw', 'cpi', 'bond_10y', 'm2'];
     const TABLE_PAGE_SIZE = 10;
-    const ECOS_CODES = {
+    /* const ECOS_CODES = {
         cpi: { statcode: '901Y001', itemcode: '0', cycle: 'M' },
         bond_10y: { statcode: '060Y001', itemcode: '0102000', cycle: 'D' },
         bond_3y: { statcode: '060Y001', itemcode: '0101000', cycle: 'D' },
         m2: { statcode: '002Y008', itemcode: 'BBMA01', cycle: 'M', yoy: true },
-    };
+    };*/
+    // 수정 후 (최종 검증된 최신 ECOS 코드로 전면 교체)
+    const ECOS_CODES = {
+    // 소비자물가지수(총지수, 2020=100, 전년동월비)
+    cpi: { statcode: '901Y001', itemcode: '0', cycle: 'M' }, // 이 코드는 유효하여 변경 없음
+    
+    // 국고채수익률(10년)
+    bond_10y: { statcode: '064Y001', itemcode: '010110000', cycle: 'D' }, // 검증된 최신 코드
+    
+    // 국고채수익률(3년)
+    bond_3y: { statcode: '064Y001', itemcode: '010090000', cycle: 'D' }, // 검증된 최신 코드
+    
+    // M2(광의통화, 평잔, 원계열) - yoy 계산이 필요함
+    m2: { statcode: '101Y002', itemcode: 'BBMA01', cycle: 'M', yoy: true }, // 검증된 최신 코드
+};
 
     // --- STATE ---
     let fullData = [];
