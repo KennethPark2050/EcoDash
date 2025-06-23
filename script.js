@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const ecosMonthlyEndDate = endDate.slice(0, 7).replace('-', '');
 
             const dataPromises = {
-                kospi: fetchAlphaData(marketKey, 'stock', '069500.KS'),
+                kospi: fetchAlphaData(marketKey, 'stock', 'SPY'),
                 usd_krw: fetchAlphaData(marketKey, 'fx', 'USD/KRW'),
                 cpi: fetchEcosData(ecosKey, ECOS_CODES.cpi, ecosMonthlyStartDate, ecosMonthlyEndDate),
                 bond_10y: fetchEcosData(ecosKey, ECOS_CODES.bond_10y, ecosDailyStartDate, ecosDailyEndDate),
