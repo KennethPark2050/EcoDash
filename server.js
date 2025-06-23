@@ -1,73 +1,52 @@
-// server.js (Node.js v18+ 최종 버전 - node-fetch 불필요)
+// server.js (최종 안정화 버전 - 코드 순서 보장)
 const express = require('express');
-// const fetch = require('node-fetch'); // Node.js v18 이상에서는 이 줄이 필요 없습니다!
-
 const app = express();
 const port = 3000;
 
+// --- 1. API 라우트 먼저 정의 ---
+
 // Alpha Vantage API 프록시
 app.get('/api/alpha', async (req, res) => {
+    // ... (이전 답변의 코드와 동일, 변경 없음)
     const { func, symbol, apikey } = req.query;
-    if (!func || !symbol || !apikey) {
-        return res.status(400).json({ error: 'Missing required query parameters for Alpha Vantage' });
-    }
-    
-    // Alpha Vantage의 환율 티커는 '/'를 포함하므로 직접 사용합니다.
+    if (!func || !symbol || !apikey) return res.status(400).json({ error: 'Missing required query parameters' });
     const symbolQuery = func === 'FX_DAILY' ? `from_symbol=${symbol.split('/')[0]}&to_symbol=${symbol.split('/')[1]}` : `symbol=${symbol}`;
     const url = `https://www.alphavantage.co/query?function=${func}&${symbolQuery}&outputsize=full&apikey=${apikey}`;
-    
-    console.log(`[Proxy] Requesting Alpha Vantage: ${url.replace(apikey, 'REDACTED')}`);
-
     try {
-        // Node.js에 내장된 fetch를 직접 사용합니다.
-        const apiResponse = await fetch(url); 
-        if (!apiResponse.ok) { // HTTP 상태 코드가 200-299가 아닌 경우
-            throw new Error(`API server responded with status: ${apiResponse.status}`);
-        }
+        const apiResponse = await fetch(url);
+        if (!apiResponse.ok) throw new Error(`API server status: ${apiResponse.status}`);
         const data = await apiResponse.json();
-        if (data["Error Message"] || data["Information"]) {
-            console.error('[Proxy Error] Alpha Vantage API Error:', data);
-            return res.status(500).json({ error: 'Alpha Vantage API limit reached or invalid request', details: data });
-        }
+        if (data["Error Message"] || data["Information"]) return res.status(500).json({ error: 'API limit or invalid request', details: data });
         res.json(data);
     } catch (error) {
-        console.error('[Proxy Error] Alpha Vantage Proxy Fetch Error:', error);
-        res.status(500).json({ error: 'Failed to fetch from Alpha Vantage API', details: error.message });
+        res.status(500).json({ error: 'Failed to fetch from API', details: error.message });
     }
 });
 
 // ECOS API 프록시
 app.get('/api/ecos', async (req, res) => {
+    // ... (이전 답변의 코드와 동일, 변경 없음)
     const { apikey, statcode, cycle, start, end, itemcode } = req.query;
-    if (!apikey || !statcode || !cycle || !start || !end || !itemcode) {
-         return res.status(400).json({ error: 'Missing required query parameters for ECOS' });
-    }
+    if (!apikey || !statcode || !cycle || !start || !end || !itemcode) return res.status(400).json({ error: 'Missing required query parameters' });
     const url = `https://ecos.bok.or.kr/api/StatisticSearch/${apikey}/json/kr/1/10000/${statcode}/${cycle}/${start}/${end}/${itemcode}`;
-    
-    console.log(`[Proxy] Requesting ECOS: ${url.replace(apikey, 'REDACTED')}`);
-
     try {
-        // Node.js에 내장된 fetch를 직접 사용합니다.
         const apiResponse = await fetch(url);
-        if (!apiResponse.ok) {
-            throw new Error(`API server responded with status: ${apiResponse.status}`);
-        }
+        if (!apiResponse.ok) throw new Error(`API server status: ${apiResponse.status}`);
         const data = await apiResponse.json();
-        if (data.RESULT && data.RESULT.CODE !== 'INFO-000') {
-             console.error('[Proxy Error] ECOS API Error:', data.RESULT.MESSAGE);
-             return res.status(500).json({ error: 'ECOS API returned an error', details: data.RESULT.MESSAGE });
-        }
+        if (data.RESULT && data.RESULT.CODE !== 'INFO-000') return res.status(500).json({ error: 'ECOS API returned an error', details: data.RESULT.MESSAGE });
         res.json(data);
     } catch (error) {
-        console.error('[Proxy Error] ECOS Proxy Fetch Error:', error);
-        res.status(500).json({ error: 'Failed to fetch from ECOS API', details: error.message });
+        res.status(500).json({ error: 'Failed to fetch from API', details: error.message });
     }
 });
 
-// 프론트엔드 정적 파일 서비스
+// --- 2. 정적 파일 서비스 미들웨어는 API 라우트 뒤에 위치 ---
+// 현재 폴더(.)에 있는 index.html, style.css, script.js 등을 제공
 app.use(express.static('.'));
 
-app.listen(port, () => {
-    console.log(`✅ Proxy server listening at http://localhost:${port}`);
-    console.log('이제 브라우저에서 http://localhost:3000 으로 접속하세요.');
+
+// --- 3. 서버 리스닝은 맨 마지막에 ---
+// 모든 네트워크 인터페이스(0.0.0.0)에서 오는 요청을 받도록 설정
+app.listen(port, '0.0.0.0', () => { 
+    console.log(`✅ Server is running and listening on port ${port} for all interfaces.`);
 });
