@@ -36,23 +36,28 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- API & DATA HANDLING ---
     // script.js 파일의 fetchAlphaData 함수만 이 코드로 교체하세요.
 
+    // script.js 파일의 fetchAlphaData 함수만 이 코드로 교체하세요.
+
     async function fetchAlphaData(apiKey, func, params = {}) {
-        // URLSearchParams 대신 직접 문자열 조합 방식으로 변경
+        // Vercel 프록시를 거치지 않고 Alpha Vantage API를 직접 호출하도록 변경
         let queryString = `function=${func}&apikey=${apiKey}`;
         for (const key in params) {
             queryString += `&${key}=${params[key]}`;
         }
         
-        // Vercel 프록시를 통해 호출
-        const url = `/api/alpha?${queryString}`;
+        // 최종 URL
+        const url = `https://www.alphavantage.co/query?${queryString}`;
         
-        console.log(`Requesting Alpha Vantage: ${func} with params`, params);
+        console.log(`Requesting Alpha Vantage DIRECTLY: ${url.replace(apiKey, 'REDACTED')}`);
 
         const response = await fetch(url);
         if (!response.ok) throw new Error(`API 서버가 상태 코드 ${response.status}(으)로 응답했습니다.`);
         
         const data = await response.json();
-        if (data.error) throw new Error(`[API Error] ${data.details['Error Message'] || data.details['Information'] || data.error}`);
+        // 직접 호출하므로 data.error는 없고, Alpha Vantage의 자체 에러 메시지를 확인
+        if (data['Error Message'] || data['Information']) {
+            throw new Error(`[API Error] ${data['Error Message'] || data['Information']}`);
+        }
 
         const timeSeriesKey = Object.keys(data).find(k => k.includes('data') || k.includes('Daily'));
         if (!timeSeriesKey || !data[timeSeriesKey]) {
@@ -69,7 +74,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return { date: date, value: parseFloat(entry[closeKey]) || null };
             });
         }
-    } 
+    }
+
 
     function mergeData(dataStreams) {
         const dataMap = new Map();
