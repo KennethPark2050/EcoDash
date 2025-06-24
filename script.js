@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function setupDashboardUI() {
         indicatorTogglesEl.innerHTML = '';
         MAIN_CHART_INDICATORS.forEach(key => {
-            if (availableIndicators.includes(key)) {
+            if (availableIndicators.includes(key) && INDICATORS[key]) {
                 const label = document.createElement('label');
                 label.innerHTML = `<input type="checkbox" name="indicator" value="${key}" checked> ${INDICATORS[key].name}`;
                 indicatorTogglesEl.appendChild(label);
@@ -151,17 +151,32 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         indicatorTogglesEl.querySelectorAll('input').forEach(toggle => toggle.addEventListener('change', updateMainChart));
         
-        const lastDate = fullData[fullData.length - 1].date;
+        const lastDate = fullData.length > 0 ? fullData[fullData.length - 1].date : new Date().toISOString().slice(0, 10);
         const oneYearAgo = new Date(lastDate);
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        flatpickr(dateRangePickerEl, { mode: "range", dateFormat: "Y-m-d", defaultDate: [oneYearAgo.toISOString().slice(0, 10), lastDate], minDate: fullData[0].date, maxDate: lastDate });
+        
+        flatpickr(dateRangePickerEl, {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            defaultDate: [oneYearAgo.toISOString().slice(0, 10), lastDate],
+            minDate: fullData.length > 0 ? fullData[0].date : undefined,
+            maxDate: lastDate
+        });
     }
 
     function updateDashboard() {
         const dateRange = dateRangePickerEl.value.split(' to ');
         if (dateRange.length < 2) return;
+        
         currentData = fullData.filter(d => d.date >= dateRange[0] && d.date <= dateRange[1]);
-        if (currentData.length === 0) return;
+        if (currentData.length === 0) {
+            mainChart.clear();
+            yieldSpreadChart.clear();
+            scatterPlot.clear();
+            // 테이블과 카드도 비워주는 로직 추가 가능
+            return;
+        }
+        
         currentPage = 1;
         updateKpiCards();
         updateMainChart();
@@ -177,10 +192,12 @@ document.addEventListener('DOMContentLoaded', function () {
         availableIndicators.forEach(key => {
             if (!INDICATORS[key]) return;
             const cardEl = document.getElementById(`kpi-${key}`);
-            if (!cardEl || latest[key] === null) return;
+            if (!cardEl || latest[key] === null || latest[key] === undefined) return;
+            
             const value = latest[key];
             const indicatorConfig = INDICATORS[key];
             cardEl.querySelector('.value').textContent = indicatorConfig.format(value);
+
             if (prev && prev[key] !== null) {
                 const change = value - prev[key];
                 if (key.includes('bond')) {
@@ -197,20 +214,25 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateMainChart() {
-        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value).filter(key => availableIndicators.includes(key) && INDICATORS[key]);
+        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked'))
+            .map(cb => cb.value)
+            .filter(key => availableIndicators.includes(key) && INDICATORS[key]);
+
         const series = selectedIndicators.map(key => ({
-            name: INDICATORS[key].name, type: 'line',
+            name: INDICATORS[key].name,
+            type: 'line',
             yAxisIndex: INDICATORS[key].yAxisIndex,
             data: currentData.map(d => d[key]),
-            showSymbol: false, color: INDICATORS[key].color
+            showSymbol: false,
+            color: INDICATORS[key].color
         }));
-        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 'auto' }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
+        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 'auto' }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price', scale: true }, { type: 'value', name: 'Yield (%)', position: 'right', scale: true }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
     }
     
     function updateSubCharts() {
         if (availableIndicators.includes('bond10y') && availableIndicators.includes('bond2y')) {
             const yieldSpreadData = currentData.map(d => ({ date: d.date, value: d.bond10y - d.bond2y }));
-            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%', bottom: '10%', top: '15%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)' }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value ? d.value.toFixed(2) : null), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
+            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%', bottom: '10%', top: '15%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)', scale: true }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value ? d.value.toFixed(2) : null), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
         } else { yieldSpreadChart.clear(); }
         
         if (availableIndicators.includes('oil') && availableIndicators.includes('usdkrw')) {
@@ -219,14 +241,33 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateDataTable() {
-        const tableBody = document.querySelector('#data-table tbody'); const tableHead = document.querySelector('#data-table thead');
-        tableBody.innerHTML = ''; tableHead.innerHTML = ''; if (currentData.length === 0) return;
+        const tableBody = document.querySelector('#data-table tbody');
+        const tableHead = document.querySelector('#data-table thead');
+        tableBody.innerHTML = ''; tableHead.innerHTML = '';
+        if (currentData.length === 0) return;
+
         const headers = ['date', ...availableIndicators.filter(key => INDICATORS[key])];
         const headerRow = document.createElement('tr');
-        headers.forEach(key => { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); });
+        headers.forEach(key => {
+            const th = document.createElement('th');
+            th.textContent = INDICATORS[key].name;
+            headerRow.appendChild(th);
+        });
         tableHead.appendChild(headerRow);
+
         const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
-        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { const cell = document.createElement('td'); const value = rowData[key]; const config = INDICATORS[key]; cell.textContent = (value !== null && value !== undefined && config) ? (config.format ? config.format(value) : value) : 'N/A'; row.appendChild(cell); }); tableBody.appendChild(row); });
+        pageData.forEach(rowData => {
+            const row = document.createElement('tr');
+            headers.forEach(key => {
+                const cell = document.createElement('td');
+                const value = rowData[key];
+                const config = INDICATORS[key];
+                cell.textContent = (value !== null && value !== undefined && config && config.format) ? config.format(value) : (value || 'N/A');
+                row.appendChild(cell);
+            });
+            tableBody.appendChild(row);
+        });
+
         const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
         document.getElementById('page-info').textContent = `Page ${currentPage} of ${maxPage}`;
         document.getElementById('prev-page').disabled = currentPage === 1;
