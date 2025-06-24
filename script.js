@@ -1,3 +1,5 @@
+// script.js (최종 검증 및 완성 버전)
+
 document.addEventListener('DOMContentLoaded', function () {
     console.log("DOM 로드 완료. 스크립트 초기화 시작 (최종 테스트 Ver.)");
 
@@ -8,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
         usd_krw: { name: '환율', color: '#FF9500', yAxisIndex: 1, format: (v) => v.toFixed(2) },
         base_rate: { name: '기준금리', color: '#34C759', yAxisIndex: 1, format: (v) => v.toFixed(2) + '%' },
         cpi_raw: { name: '소비자물가지수', color: '#FF3B30', yAxisIndex: 0, format: (v) => v.toFixed(2) },
-        m2_raw: { name: 'M2 통화량(십억)', color: '#AF52DE', yAxisIndex: 0, format: (v) => (v/1000).toFixed(0) },
+        m2_raw: { name: 'M2 통화량(조)', color: '#AF52DE', yAxisIndex: 0, format: (v) => (v / 1000).toFixed(1) },
     };
     const MAIN_CHART_INDICATORS = ['market_index', 'usd_krw', 'base_rate'];
     const TABLE_PAGE_SIZE = 10;
@@ -18,9 +20,10 @@ document.addEventListener('DOMContentLoaded', function () {
         m2_raw: { statcode: '101Y002', itemcode: 'BBMA01', cycle: 'M' },
     };
 
-    // --- STATE, DOM, CHART Instances (기존과 동일) ---
+    // --- STATE ---
     let fullData = [], currentData = [], currentPage = 1, availableIndicators = [];
-    // ... 모든 DOM, Chart 인스턴스 변수들 ...
+
+    // --- DOM ELEMENTS ---
     const loadingOverlay = document.getElementById('loading-overlay');
     const apiKeySection = document.getElementById('api-key-section');
     const dashboardContainer = document.getElementById('dashboard-main-container');
@@ -30,12 +33,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const dateRangePickerEl = document.getElementById('date-range');
     const indicatorTogglesEl = document.getElementById('indicator-toggles');
     const refreshBtn = document.getElementById('refresh-btn');
+    const dualAxisToggle = document.getElementById('dual-axis-toggle');
+    const scatterPlotEl = document.getElementById('scatter-plot'); // Scatter plot has no specific controls to reference here
+    const downloadCsvBtn = document.getElementById('download-csv');
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    const pageInfoEl = document.getElementById('page-info');
+
+    // --- CHART INSTANCES ---
     const mainChart = echarts.init(document.getElementById('main-timeseries-chart'));
     const monthlyReturnHeatmap = echarts.init(document.getElementById('monthly-return-heatmap'));
-    const scatterPlot = echarts.init(document.getElementById('scatter-plot'));
+    const scatterPlot = echarts.init(scatterPlotEl);
     const sparklineCharts = {};
 
-    // --- API & DATA HANDLING (기존과 동일) ---
+    // --- API & DATA HANDLING ---
     async function fetchEcosData(apiKey, codeInfo, startDate, endDate) {
         const params = new URLSearchParams({ apikey: apiKey, statcode: codeInfo.statcode, cycle: codeInfo.cycle, start: startDate, end: endDate, itemcode: codeInfo.itemcode });
         const url = `/api/ecos?${params.toString()}`;
@@ -65,12 +76,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
     function mergeData(dataStreams) {
-        // ... (기존 mergeData 함수와 동일, 여기에 붙여넣으세요)
+        const dataMap = new Map();
+        const allDataPoints = Object.values(dataStreams).flat();
+        if (allDataPoints.length === 0) return [];
+        const allDates = [...new Set(allDataPoints.map(d => d.date))].sort();
+        allDates.forEach(date => dataMap.set(date, { date }));
+        for (const key in dataStreams) {
+            const isMonthly = ECOS_CODES[key] && ECOS_CODES[key].cycle === 'M';
+            dataStreams[key].forEach(item => {
+                if (isMonthly) {
+                    const yearMonth = item.date.slice(0, 7);
+                    for (const dateOnMap of dataMap.keys()) {
+                        if (dateOnMap.startsWith(yearMonth)) { const entry = dataMap.get(dateOnMap); entry[key] = item.value; dataMap.set(dateOnMap, entry); }
+                    }
+                } else { if (dataMap.has(item.date)) { const entry = dataMap.get(item.date); entry[key] = item.value; dataMap.set(item.date, entry); } }
+            });
+        }
+        let lastValues = {};
+        return Array.from(dataMap.values()).map(entry => {
+            for (const key in INDICATORS) {
+                if (key === 'date') continue;
+                if (entry[key] !== undefined && entry[key] !== null) { lastValues[key] = entry[key]; }
+                else if (lastValues[key] !== undefined) { entry[key] = lastValues[key]; }
+                else { entry[key] = null; }
+            }
+            return entry;
+        }).filter(d => Object.values(d).some(v => v !== null && typeof v === 'number'));
     }
 
     // --- INITIALIZATION & EVENT LISTENERS ---
     function init() {
-        // ... (기존 init 함수와 동일, 여기에 붙여넣으세요)
+        console.log("init 함수 실행.");
+        if (!loadDataBtn) { console.error("CRITICAL: '데이터 불러오기' 버튼을 찾을 수 없습니다."); return; }
+        ecosApiKeyInput.value = localStorage.getItem('ecosApiKey') || '';
+        marketApiKeyInput.value = localStorage.getItem('marketApiKey') || '';
+        loadDataBtn.addEventListener('click', loadAndInitializeDashboard);
+        refreshBtn.addEventListener('click', () => updateDashboard(false));
+        if (dualAxisToggle) dualAxisToggle.addEventListener('change', updateMainChart);
+        downloadCsvBtn.addEventListener('click', downloadCSV);
+        prevPageBtn.addEventListener('click', () => { if (currentPage > 1) { currentPage--; updateDataTable(); } });
+        nextPageBtn.addEventListener('click', () => { if (currentPage < Math.ceil(currentData.length / TABLE_PAGE_SIZE)) { currentPage++; updateDataTable(); } });
     }
 
     // --- loadAndInitializeDashboard (최종 테스트 버전) ---
@@ -79,7 +124,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const ecosKey = ecosApiKeyInput.value.trim();
         const marketKey = marketApiKeyInput.value.trim();
         if (!ecosKey || !marketKey) { alert('두 개의 API 키를 모두 입력해야 합니다.'); return; }
-        
         localStorage.setItem('ecosApiKey', ecosKey);
         localStorage.setItem('marketApiKey', marketKey);
         loadingOverlay.classList.remove('hidden');
@@ -90,7 +134,6 @@ document.addEventListener('DOMContentLoaded', function () {
             const startDateDt = new Date();
             startDateDt.setFullYear(today.getFullYear() - 5);
             const startDate = startDateDt.toISOString().slice(0, 10);
-            
             const ecosDailyStartDate = startDate.replace(/-/g, '');
             const ecosDailyEndDate = endDate.replace(/-/g, '');
             const ecosMonthlyStartDate = startDate.slice(0, 7).replace('-', '');
@@ -107,7 +150,6 @@ document.addEventListener('DOMContentLoaded', function () {
             const results = await Promise.allSettled(Object.values(dataPromises));
             const dataStreams = {};
             availableIndicators = [];
-
             results.forEach((result, index) => {
                 const key = Object.keys(dataPromises)[index];
                 if (result.status === 'fulfilled' && result.value.length > 0) {
@@ -138,6 +180,95 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
-    // --- 나머지 모든 함수 (setupDashboardUI, update... 등) ---
-    // (이전 풀버전 코드와 동일, 여기에 붙여넣으세요)
+    // --- 나머지 모든 함수 (UI 업데이트 및 헬퍼) ---
+    function setupDashboardUI() {
+        indicatorTogglesEl.innerHTML = '';
+        MAIN_CHART_INDICATORS.forEach(key => {
+            if (availableIndicators.includes(key)) {
+                const isChecked = ['market_index', 'base_rate'].includes(key);
+                const label = document.createElement('label');
+                label.innerHTML = `<input type="checkbox" name="indicator" value="${key}" ${isChecked ? 'checked' : ''}> ${INDICATORS[key].name}`;
+                indicatorTogglesEl.appendChild(label);
+            }
+        });
+        indicatorTogglesEl.querySelectorAll('input').forEach(toggle => toggle.addEventListener('change', updateMainChart));
+        
+        const lastDate = fullData[fullData.length - 1].date;
+        const oneYearAgo = new Date(lastDate);
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        flatpickr(dateRangePickerEl, { mode: "range", dateFormat: "Y-m-d", defaultDate: [oneYearAgo.toISOString().slice(0, 10), lastDate], minDate: fullData[0].date, maxDate: lastDate });
+    }
+
+    function updateDashboard() {
+        const dateRange = dateRangePickerEl.value.split(' to ');
+        if (dateRange.length < 2) return;
+        currentData = fullData.filter(d => d.date >= dateRange[0] && d.date <= dateRange[1]);
+        currentPage = 1;
+        if (currentData.length === 0) { alert('선택된 기간에 데이터가 없습니다.'); return; }
+        updateKpiCards();
+        updateMainChart();
+        updateSubCharts();
+        updateDataTable();
+    }
+
+    function updateKpiCards() {
+        const latest = currentData[currentData.length - 1];
+        const prev = currentData.length > 1 ? currentData[currentData.length - 2] : latest;
+        availableIndicators.forEach(key => {
+            const cardEl = document.getElementById(`kpi-${key}`);
+            if (!cardEl || latest[key] === null) return;
+            const value = latest[key];
+            cardEl.querySelector('.value').textContent = INDICATORS[key].format(value);
+            if (key === 'market_index' || key === 'usd_krw') {
+                const change = value - prev[key];
+                const percent = (value / prev[key] - 1) * 100;
+                cardEl.querySelector('.change').textContent = `${percent.toFixed(2)}%`;
+                cardEl.querySelector('.change').className = `change ${change >= 0 ? 'positive' : 'negative'}`;
+            } else {
+                 cardEl.querySelector('.change').textContent = '--';
+            }
+            renderSparkline(`sparkline-${key}`, currentData.map(d => d[key]), INDICATORS[key].color);
+        });
+    }
+
+    function updateMainChart() {
+        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value).filter(key => availableIndicators.includes(key));
+        const useDualAxis = dualAxisToggle.checked;
+        const series = selectedIndicators.map(key => ({ name: INDICATORS[key].name, type: 'line', yAxisIndex: useDualAxis ? INDICATORS[key].yAxisIndex : 0, data: currentData.map(d => d[key]), showSymbol: false, color: INDICATORS[key].color }));
+        const yAxis = useDualAxis ? [{ type: 'value', name: '주가지수' }, { type: 'value', name: '환율/금리(%)', position: 'right' }] : [{ type: 'value' }];
+        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: selectedIndicators.map(key => INDICATORS[key].name) }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis, series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
+    }
+    
+    function updateSubCharts() {
+        if (availableIndicators.includes('market_index')) {
+            const monthlyReturns = {};
+            for (let i = 1; i < currentData.length; i++) { if (!currentData[i].market_index) continue; const date = new Date(currentData[i].date); const year = date.getFullYear(); const month = date.getMonth(); if (!monthlyReturns[year]) monthlyReturns[year] = {}; if (!monthlyReturns[year][month]) monthlyReturns[year][month] = { start: currentData[i - 1].market_index, end: 0 }; monthlyReturns[year][month].end = currentData[i].market_index; }
+            const heatmapData = []; const years = Object.keys(monthlyReturns).sort();
+            years.forEach(year => { for (let month = 0; month < 12; month++) { if (monthlyReturns[year][month]) { const monthData = monthlyReturns[year][month]; const monthlyReturn = (monthData.end / monthData.start - 1) * 100; heatmapData.push([years.indexOf(year), month, monthlyReturn]); } } });
+            monthlyReturnHeatmap.setOption({ tooltip: { formatter: (p) => `${years[p.data[0]]}년 ${p.data[1] + 1}월: ${p.data[2].toFixed(2)}%` }, grid: { height: '60%' }, xAxis: { type: 'category', data: years }, yAxis: { type: 'category', data: '1월,2월,3월,4월,5월,6월,7월,8월,9월,10월,11월,12월'.split(',') }, visualMap: { min: -10, max: 10, calculable: true, orient: 'horizontal', left: 'center', bottom: '0%', inRange: { color: ['#FF3B30', '#ffffff', '#34C759'] } }, series: [{ type: 'heatmap', data: heatmapData, label: { show: true, formatter: (p) => p.value[2].toFixed(1) } }] });
+        } else { monthlyReturnHeatmap.clear(); }
+        
+        if (availableIndicators.includes('market_index') && availableIndicators.includes('usd_krw')) {
+            scatterPlot.setOption({ grid: { containLabel: true }, tooltip: { trigger: 'item', formatter: (p) => `${INDICATORS.market_index.name}: ${p.value[0].toFixed(2)}<br/>${INDICATORS.usd_krw.name}: ${p.value[1].toFixed(2)}` }, xAxis: { type: 'value', name: INDICATORS.market_index.name, scale: true }, yAxis: { type: 'value', name: INDICATORS.usd_krw.name, scale: true }, series: [{ symbolSize: 8, data: currentData.map(d => [d.market_index, d.usd_krw]), type: 'scatter' }] });
+        } else { scatterPlot.clear(); }
+    }
+
+    function updateDataTable() {
+        const tableBody = document.querySelector('#data-table tbody'); const tableHead = document.querySelector('#data-table thead');
+        tableBody.innerHTML = ''; tableHead.innerHTML = ''; if (currentData.length === 0) return;
+        const headers = Object.keys(INDICATORS).filter(key => availableIndicators.includes(key));
+        const headerRow = document.createElement('tr'); headers.forEach(key => { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); });
+        tableHead.appendChild(headerRow);
+        const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
+        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = value !== null && value !== undefined ? (INDICATORS[key].format ? INDICATORS[key].format(value) : value) : 'N/A'; row.appendChild(cell); }); tableBody.appendChild(row); });
+        const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
+        pageInfoEl.textContent = `Page ${currentPage} of ${maxPage}`;
+        prevPageBtn.disabled = currentPage === 1;
+        nextPageBtn.disabled = currentPage === maxPage;
+    }
+    function renderSparkline(id, data, color) { const chartEl = document.getElementById(id); if (!chartEl) return; if (!sparklineCharts[id]) sparklineCharts[id] = echarts.init(chartEl); sparklineCharts[id].setOption({ grid: { top: 5, bottom: 5, left: 5, right: 5 }, xAxis: { type: 'category', show: false }, yAxis: { type: 'value', show: false }, series: [{ type: 'line', data, showSymbol: false, lineStyle: { color, width: 2 } }] }); }
+    function downloadCSV() { if (currentData.length === 0) return; const headers = Object.keys(INDICATORS).filter(k => availableIndicators.includes(k)); const csvString = [headers.map(k => INDICATORS[k].name).join(','), ...currentData.map(row => headers.map(k => row[k] ?? 'N/A').join(','))].join('\n'); const blob = new Blob([`\uFEFF${csvString}`], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'economic_data.csv'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }
+
+    // --- Start the App ---
+    init();
 });
