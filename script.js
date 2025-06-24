@@ -3,7 +3,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     console.log("DOM 로드 완료. 글로벌 거시 경제 대시보드 초기화 시작.");
 
-    // --- CONFIGURATION (무료 API 기반) ---
+    // --- CONFIGURATION ---
     const INDICATORS = {
         date: { name: '날짜', format: (v) => v },
         oil: { name: 'WTI 유가', color: '#AF52DE', yAxisIndex: 0, format: (v) => `$${v.toFixed(2)}` },
@@ -15,11 +15,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const TABLE_PAGE_SIZE = 10;
 
     // --- STATE, DOM, CHART Instances ---
-    let fullData = [];
-    let currentData = [];
-    let currentPage = 1;
-    let availableIndicators = [];
-    
+    let fullData = [], currentData = [], currentPage = 1, availableIndicators = [];
     const loadingOverlay = document.getElementById('loading-overlay');
     const apiKeySection = document.getElementById('api-key-section');
     const dashboardContainer = document.getElementById('dashboard-main-container');
@@ -59,29 +55,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function mergeData(dataStreams) {
         const dataMap = new Map();
-        const allDataPoints = Object.values(dataStreams).flat();
-        if (allDataPoints.length === 0) return [];
-        let minDateStr = "9999-12-31", maxDateStr = "1900-01-01";
-        allDataPoints.forEach(d => { if(d && d.date && d.value !== null && !isNaN(d.value)) { if (d.date < minDateStr) minDateStr = d.date; if (d.date > maxDateStr) maxDateStr = d.date; }});
-        if (minDateStr > maxDateStr) return [];
-        for (let d = new Date(minDateStr); d <= new Date(maxDateStr); d.setDate(d.getDate() + 1)) {
-            const dateStr = d.toISOString().slice(0, 10);
-            dataMap.set(dateStr, { date: dateStr });
-        }
-        for (const key in dataStreams) {
-            dataStreams[key].forEach(item => { if (item && item.date && dataMap.has(item.date)) { dataMap.get(item.date)[key] = item.value; } });
-        }
+        Object.keys(dataStreams).forEach(key => {
+            dataStreams[key].forEach(item => {
+                if (item && item.date && item.value !== null && !isNaN(item.value)) {
+                    if (!dataMap.has(item.date)) {
+                        dataMap.set(item.date, { date: item.date });
+                    }
+                    dataMap.get(item.date)[key] = item.value;
+                }
+            });
+        });
+
+        if (dataMap.size === 0) return [];
+        
+        let sortedDates = Array.from(dataMap.keys()).sort();
         let lastValues = {};
-        return Array.from(dataMap.values()).sort((a,b) => new Date(a.date) - new Date(b.date)).map(entry => {
-            const newEntry = { ...entry };
+        let finalData = [];
+
+        for (let d = new Date(sortedDates[0]); d <= new Date(sortedDates[sortedDates.length - 1]); d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().slice(0, 10);
+            let entry = dataMap.get(dateStr) || { date: dateStr };
+            
             for (const key in INDICATORS) {
                 if (key === 'date') continue;
-                if (newEntry[key] !== undefined && newEntry[key] !== null) { lastValues[key] = newEntry[key]; }
-                else if (lastValues[key] !== undefined) { newEntry[key] = lastValues[key]; }
-                else { newEntry[key] = null; }
+                if (entry[key] !== undefined && entry[key] !== null) {
+                    lastValues[key] = entry[key];
+                } else if (lastValues[key] !== undefined) {
+                    entry[key] = lastValues[key];
+                } else {
+                    entry[key] = null;
+                }
             }
-            return newEntry;
-        });
+            finalData.push(entry);
+        }
+        return finalData;
     }
 
     // --- INITIALIZATION & EVENT LISTENERS ---
@@ -167,16 +174,13 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateDashboard() {
         const dateRange = dateRangePickerEl.value.split(' to ');
         if (dateRange.length < 2) return;
-        
         currentData = fullData.filter(d => d.date >= dateRange[0] && d.date <= dateRange[1]);
         if (currentData.length === 0) {
             mainChart.clear();
             yieldSpreadChart.clear();
             scatterPlot.clear();
-            // 테이블과 카드도 비워주는 로직 추가 가능
             return;
         }
-        
         currentPage = 1;
         updateKpiCards();
         updateMainChart();
@@ -214,10 +218,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateMainChart() {
-        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked'))
-            .map(cb => cb.value)
-            .filter(key => availableIndicators.includes(key) && INDICATORS[key]);
-
+        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value).filter(key => availableIndicators.includes(key) && INDICATORS[key]);
         const series = selectedIndicators.map(key => ({
             name: INDICATORS[key].name,
             type: 'line',
@@ -241,33 +242,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateDataTable() {
-        const tableBody = document.querySelector('#data-table tbody');
-        const tableHead = document.querySelector('#data-table thead');
-        tableBody.innerHTML = ''; tableHead.innerHTML = '';
-        if (currentData.length === 0) return;
-
+        const tableBody = document.querySelector('#data-table tbody'); const tableHead = document.querySelector('#data-table thead');
+        tableBody.innerHTML = ''; tableHead.innerHTML = ''; if (currentData.length === 0) return;
         const headers = ['date', ...availableIndicators.filter(key => INDICATORS[key])];
         const headerRow = document.createElement('tr');
-        headers.forEach(key => {
-            const th = document.createElement('th');
-            th.textContent = INDICATORS[key].name;
-            headerRow.appendChild(th);
-        });
+        headers.forEach(key => { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); });
         tableHead.appendChild(headerRow);
-
         const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
-        pageData.forEach(rowData => {
-            const row = document.createElement('tr');
-            headers.forEach(key => {
-                const cell = document.createElement('td');
-                const value = rowData[key];
-                const config = INDICATORS[key];
-                cell.textContent = (value !== null && value !== undefined && config && config.format) ? config.format(value) : (value || 'N/A');
-                row.appendChild(cell);
-            });
-            tableBody.appendChild(row);
-        });
-
+        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { const cell = document.createElement('td'); const value = rowData[key]; const config = INDICATORS[key]; cell.textContent = (value !== null && value !== undefined && config && config.format) ? config.format(value) : 'N/A'; row.appendChild(cell); }); tableBody.appendChild(row); });
         const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
         document.getElementById('page-info').textContent = `Page ${currentPage} of ${maxPage}`;
         document.getElementById('prev-page').disabled = currentPage === 1;
