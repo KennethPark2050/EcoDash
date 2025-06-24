@@ -3,10 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>경제 지표 대시보드 (최종 테스트)</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <title>ECOS API 최종 테스트</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,50 +14,38 @@
 
     <div id="api-key-section">
         <div class="api-key-container">
-            <h1>대시보드 데이터 로드</h1>
-            <p>데이터를 불러오려면 API 키를 입력해주세요.</p>
+            <h1>ECOS API 최종 테스트</h1>
+            <p>호출 방식이 문제인지, 키가 문제인지 확인합니다.</p>
             <div class="api-input-group">
                 <label for="ecos-api-key">한국은행(ECOS) API 키</label>
                 <input type="password" id="ecos-api-key" placeholder="ECOS API 키를 여기에 붙여넣으세요">
             </div>
-            <div class="api-input-group">
-                <label for="market-api-key">Alpha Vantage API 키</label>
-                <input type="password" id="market-api-key" placeholder="Alpha Vantage API 키를 여기에 붙여넣으세요">
-            </div>
+            <!-- Alpha Vantage 키 입력창 임시 제거 -->
             <button id="load-data-btn">데이터 불러오기</button>
         </div>
     </div>
     
     <div id="dashboard-main-container" class="dashboard-container hidden">
         <header class="control-bar">
-            <div class="logo"><h1>📈 경제 지표 대시보드 (최종 테스트)</h1></div>
-            <div class="controls">
-                <div class="control-group"><label for="date-range">기간 선택:</label><input type="text" id="date-range"></div>
-                <div class="control-group"><label>지표 선택:</label><div id="indicator-toggles"></div></div>
-                <button id="refresh-btn">🔄 기간 적용</button>
-            </div>
+            <h1>테스트 결과</h1>
         </header>
 
         <section class="kpi-cards">
-            <div class="card" id="kpi-market_index"><div class="card-content"><p class="title">S&P 500 (SPY)</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div><div class="sparkline" id="sparkline-market_index"></div></div>
-            <div class="card" id="kpi-usd_krw"><div class="card-content"><p class="title">USD/KRW 환율</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div><div class="sparkline" id="sparkline-usd_krw"></div></div>
-            <div class="card" id="kpi-base_rate"><div class="card-content"><p class="title">한국은행 기준금리</p><h2 class="value">-.--%</h2><p class="change">--</p></div><div class="sparkline" id="sparkline-base_rate"></div></div>
-            <div class="card" id="kpi-cpi_raw"><div class="card-content"><p class="title">소비자물가지수</p><h2 class="value">-.--</h2><p class="change">--</p></div><div class="sparkline" id="sparkline-cpi_raw"></div></div>
-            <div class="card" id="kpi-m2_raw"><div class="card-content"><p class="title">M2 통화량</p><h2 class="value">-,---</h2><p class="change">--</p></div><div class="sparkline" id="sparkline-m2_raw"></div></div>
+            <div class="card" id="kpi-test_data">
+                <div class="card-content">
+                    <p class="title">본원통화 데이터</p>
+                    <h2 class="value">-,---.--</h2>
+                    <p class="change">--</p>
+                </div>
+            </div>
         </section>
 
-        <main class="main-chart-area">
-            <div class="chart-container"><div class="chart-header"><h3>주요 지표 시계열 비교</h3><div class="chart-controls"><label><input type="checkbox" id="dual-axis-toggle"> Y축 분리</label></div></div><div id="main-timeseries-chart" class="chart-body"></div></div>
+        <main class="main-chart-area full-width">
+             <div class="chart-container">
+                <div class="chart-header"><h3>데이터 로드 결과</h3></div>
+                <div id="result-log" class="chart-body" style="padding: 20px; white-space: pre-wrap;"></div>
+            </div>
         </main>
-
-        <aside class="sub-chart-area">
-            <div class="chart-container"><div class="chart-header"><h3>월별 S&P500 수익률</h3></div><div id="monthly-return-heatmap" class="chart-body"></div></div>
-            <div class="chart-container"><div class="chart-header"><h3>상관관계 분석</h3></div><div id="scatter-plot" class="chart-body"></div></div>
-        </aside>
-
-        <footer class="data-table-area">
-            <div class="table-container"><div class="table-header"><h3>세부 데이터</h3><button id="download-csv">CSV 다운로드</button></div><div class="table-wrapper"><table id="data-table"><thead></thead><tbody></tbody></table></div><div class="pagination"><button id="prev-page">이전</button><span id="page-info"></span><button id="next-page">다음</button></div></div>
-        </footer>
     </div>
     
     <script src="script.js"></script>
