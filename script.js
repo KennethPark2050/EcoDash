@@ -5,15 +5,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- CONFIGURATION (무료 API 기반) ---
     const INDICATORS = {
-        date: { name: '날짜' },
-        sp500: { name: 'S&P 500 (SPY)', color: '#007AFF', yAxisIndex: 0, format: (v) => v.toFixed(2) },
-        nasdaq: { name: 'Nasdaq 100 (QQQ)', color: '#5856D6', yAxisIndex: 0, format: (v) => v.toFixed(2) },
+        date: { name: '날짜', format: (v) => v },
         oil: { name: 'WTI 유가', color: '#AF52DE', yAxisIndex: 0, format: (v) => `$${v.toFixed(2)}` },
         bond10y: { name: '美 국채 10Y', color: '#FF3B30', yAxisIndex: 1, format: (v) => `${v.toFixed(2)}%` },
         bond2y: { name: '美 국채 2Y', color: '#FF9500', yAxisIndex: 1, format: (v) => `${v.toFixed(2)}%` },
         usdkrw: { name: 'USD/KRW 환율', color: '#34C759', yAxisIndex: 0, format: (v) => v.toFixed(2) },
     };
-    const MAIN_CHART_INDICATORS = ['sp500', 'oil', 'bond10y', 'usdkrw'];
+    const MAIN_CHART_INDICATORS = ['oil', 'bond10y', 'usdkrw'];
     const TABLE_PAGE_SIZE = 10;
 
     // --- STATE, DOM, CHART Instances ---
@@ -53,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             return Object.keys(seriesData).map(date => {
                 const entry = seriesData[date];
-                const closeKey = Object.keys(entry).find(k => k.includes('adjusted close') || k.includes('close'));
+                const closeKey = Object.keys(entry).find(k => k.includes('close'));
                 return { date: date, value: parseFloat(entry[closeKey]) || null };
             });
         }
@@ -101,8 +99,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             const dataEndpoints = {
-                sp500: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'SPY' } },
-                nasdaq: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'QQQ' } },
                 usdkrw: { func: 'FX_DAILY', params: { from_symbol: 'USD', to_symbol: 'KRW' } },
                 oil: { func: 'WTI', params: { interval: 'daily' } },
                 bond10y: { func: 'TREASURY_YIELD', params: { interval: 'daily', maturity: '10year' } },
@@ -177,7 +173,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (currentData.length === 0) return;
         const latest = currentData[currentData.length - 1];
         const prev = currentData.length > 1 ? currentData[currentData.length - 2] : latest;
+        
         availableIndicators.forEach(key => {
+            if (!INDICATORS[key]) return;
             const cardEl = document.getElementById(`kpi-${key}`);
             if (!cardEl || latest[key] === null) return;
             const value = latest[key];
@@ -199,16 +197,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateMainChart() {
-        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value);
-        const series = selectedIndicators.filter(key => availableIndicators.includes(key)).map(key => ({
-            name: INDICATORS[key].name,
-            type: 'line',
+        const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value).filter(key => availableIndicators.includes(key) && INDICATORS[key]);
+        const series = selectedIndicators.map(key => ({
+            name: INDICATORS[key].name, type: 'line',
             yAxisIndex: INDICATORS[key].yAxisIndex,
             data: currentData.map(d => d[key]),
-            showSymbol: false,
-            color: INDICATORS[key].color
+            showSymbol: false, color: INDICATORS[key].color
         }));
-        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 'auto' }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price / Index' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
+        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 'auto' }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
     }
     
     function updateSubCharts() {
@@ -225,11 +221,12 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateDataTable() {
         const tableBody = document.querySelector('#data-table tbody'); const tableHead = document.querySelector('#data-table thead');
         tableBody.innerHTML = ''; tableHead.innerHTML = ''; if (currentData.length === 0) return;
-        const headers = ['date', ...availableIndicators];
-        const headerRow = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); }});
+        const headers = ['date', ...availableIndicators.filter(key => INDICATORS[key])];
+        const headerRow = document.createElement('tr');
+        headers.forEach(key => { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); });
         tableHead.appendChild(headerRow);
         const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
-        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = (value !== null && value !== undefined) ? (INDICATORS[key].format(value)) : 'N/A'; row.appendChild(cell); }}); tableBody.appendChild(row); });
+        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { const cell = document.createElement('td'); const value = rowData[key]; const config = INDICATORS[key]; cell.textContent = (value !== null && value !== undefined && config) ? (config.format ? config.format(value) : value) : 'N/A'; row.appendChild(cell); }); tableBody.appendChild(row); });
         const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
         document.getElementById('page-info').textContent = `Page ${currentPage} of ${maxPage}`;
         document.getElementById('prev-page').disabled = currentPage === 1;
