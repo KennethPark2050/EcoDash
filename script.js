@@ -1,4 +1,4 @@
-// script.js (글로벌 거시 경제 대시보드 - 최종 전체 코드)
+// script.js (글로벌 거시 경제 대시보드 - 최종 완성본)
 
 document.addEventListener('DOMContentLoaded', function () {
     console.log("DOM 로드 완료. 글로벌 거시 경제 대시보드 초기화 시작.");
@@ -34,40 +34,26 @@ document.addEventListener('DOMContentLoaded', function () {
     const scatterPlot = echarts.init(document.getElementById('scatter-plot'));
 
     // --- API & DATA HANDLING ---
-    // script.js 파일의 fetchAlphaData 함수만 이 코드로 교체하세요.
-
-    // script.js 파일의 fetchAlphaData 함수만 이 코드로 교체하세요.
-
     async function fetchAlphaData(apiKey, func, params = {}) {
-        // Vercel 프록시를 거치지 않고 Alpha Vantage API를 직접 호출하도록 변경
         let queryString = `function=${func}&apikey=${apiKey}`;
         for (const key in params) {
             queryString += `&${key}=${params[key]}`;
         }
-        
-        // 최종 URL
         const url = `https://www.alphavantage.co/query?${queryString}`;
-        
         console.log(`Requesting Alpha Vantage DIRECTLY: ${url.replace(apiKey, 'REDACTED')}`);
 
         const response = await fetch(url);
         if (!response.ok) throw new Error(`API 서버가 상태 코드 ${response.status}(으)로 응답했습니다.`);
-        
         const data = await response.json();
-        // 직접 호출하므로 data.error는 없고, Alpha Vantage의 자체 에러 메시지를 확인
-        if (data['Error Message'] || data['Information']) {
-            throw new Error(`[API Error] ${data['Error Message'] || data['Information']}`);
-        }
+        if (data['Error Message'] || data['Information']) { throw new Error(`[API Error] ${data['Error Message'] || data['Information']}`); }
 
         const timeSeriesKey = Object.keys(data).find(k => k.includes('data') || k.includes('Daily'));
-        if (!timeSeriesKey || !data[timeSeriesKey]) {
-            throw new Error('API 응답에서 유효한 데이터 시리즈를 찾을 수 없습니다.');
-        }
+        if (!timeSeriesKey || !data[timeSeriesKey]) { throw new Error('API 응답에서 유효한 데이터 시리즈를 찾을 수 없습니다.'); }
         
         const seriesData = data[timeSeriesKey];
-        if (Array.isArray(seriesData)) {
+        if (Array.isArray(seriesData)) { // 경제 지표
             return seriesData.map(item => ({ date: item.date, value: parseFloat(item.value) || null })).reverse();
-        } else {
+        } else { // 환율
             return Object.keys(seriesData).map(date => {
                 const entry = seriesData[date];
                 const closeKey = Object.keys(entry).find(k => k.includes('close'));
@@ -76,28 +62,30 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-
     function mergeData(dataStreams) {
         const dataMap = new Map();
         const allDataPoints = Object.values(dataStreams).flat();
         if (allDataPoints.length === 0) return [];
         let minDateStr = "9999-12-31", maxDateStr = "1900-01-01";
-        allDataPoints.forEach(d => { if(d.value) { if (d.date < minDateStr) minDateStr = d.date; if (d.date > maxDateStr) maxDateStr = d.date; }});
+        allDataPoints.forEach(d => { if(d && d.date && d.value !== null && !isNaN(d.value)) { if (d.date < minDateStr) minDateStr = d.date; if (d.date > maxDateStr) maxDateStr = d.date; }});
+        if (minDateStr > maxDateStr) return [];
         for (let d = new Date(minDateStr); d <= new Date(maxDateStr); d.setDate(d.getDate() + 1)) {
-            dataMap.set(d.toISOString().slice(0, 10), { date: d.toISOString().slice(0, 10) });
+            const dateStr = d.toISOString().slice(0, 10);
+            dataMap.set(dateStr, { date: dateStr });
         }
         for (const key in dataStreams) {
-            dataStreams[key].forEach(item => { if (dataMap.has(item.date)) { dataMap.get(item.date)[key] = item.value; } });
+            dataStreams[key].forEach(item => { if (item && item.date && dataMap.has(item.date)) { dataMap.get(item.date)[key] = item.value; } });
         }
         let lastValues = {};
         return Array.from(dataMap.values()).sort((a,b) => new Date(a.date) - new Date(b.date)).map(entry => {
+            const newEntry = { ...entry };
             for (const key in INDICATORS) {
                 if (key === 'date') continue;
-                if (entry[key] !== undefined && entry[key] !== null && !isNaN(entry[key])) { lastValues[key] = entry[key]; }
-                else if (lastValues[key] !== undefined) { entry[key] = lastValues[key]; }
-                else { entry[key] = null; }
+                if (newEntry[key] !== undefined && newEntry[key] !== null) { lastValues[key] = newEntry[key]; }
+                else if (lastValues[key] !== undefined) { newEntry[key] = lastValues[key]; }
+                else { newEntry[key] = null; }
             }
-            return entry;
+            return newEntry;
         });
     }
 
@@ -185,33 +173,20 @@ document.addEventListener('DOMContentLoaded', function () {
         updateDataTable();
     }
     
- // script.js 파일의 updateKpiCards 함수만 이 코드로 교체하세요.
-
     function updateKpiCards() {
         const latest = currentData[currentData.length - 1];
         const prev = currentData.length > 1 ? currentData[currentData.length - 2] : latest;
-
-        // availableIndicators 대신, 현재 데이터에 있는 모든 키를 순회합니다.
-        Object.keys(latest).forEach(key => {
-            if (key === 'date' || latest[key] === null) return;
-
-            // HTML id와 일치하는지 확인
+        availableIndicators.forEach(key => {
             const cardEl = document.getElementById(`kpi-${key}`);
-            if (!cardEl) return;
-
+            if (!cardEl || latest[key] === null) return;
             const value = latest[key];
             const indicatorConfig = INDICATORS[key];
-
-            // 1. 값 표시 (포맷에 맞춰서)
             cardEl.querySelector('.value').textContent = indicatorConfig.format(value);
-
-            // 2. 등락률/등락폭 표시
             if (prev && prev[key] !== null) {
                 const change = value - prev[key];
-                
-                if (key.includes('bond')) { // 국채 금리일 경우
+                if (key.includes('bond')) {
                     cardEl.querySelector('.change').textContent = `${change.toFixed(3)}p`;
-                } else { // 그 외 (환율, 유가)
+                } else {
                     const percent = (value / prev[key] - 1) * 100;
                     cardEl.querySelector('.change').textContent = `${percent.toFixed(2)}%`;
                 }
@@ -222,21 +197,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-
     function updateMainChart() {
         const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value);
-        const series = selectedIndicators.map(key => ({ name: INDICATORS[key].name, type: 'line', yAxisIndex: INDICATORS[key].yAxisIndex, data: currentData.map(d => d[key]), showSymbol: false, color: INDICATORS[key].color }));
-        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: selectedIndicators.map(key => INDICATORS[key].name), top: 10 }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price / Index' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
+        const series = selectedIndicators
+            .filter(key => availableIndicators.includes(key))
+            .map(key => ({
+                name: INDICATORS[key].name,
+                type: 'line',
+                yAxisIndex: INDICATORS[key].yAxisIndex,
+                data: currentData.map(d => d[key]),
+                showSymbol: false,
+                color: INDICATORS[key].color
+            }));
+        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 10 }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price / Index', position: 'left' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
     }
     
     function updateSubCharts() {
         if (availableIndicators.includes('bond10y') && availableIndicators.includes('bond2y')) {
             const yieldSpreadData = currentData.map(d => ({ date: d.date, value: d.bond10y - d.bond2y }));
-            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)' }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value.toFixed(2)), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
+            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)' }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value ? d.value.toFixed(2) : null), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
         } else { yieldSpreadChart.clear(); }
         
         if (availableIndicators.includes('oil') && availableIndicators.includes('usdkrw')) {
-            scatterPlot.setOption({ grid: { containLabel: true }, tooltip: { trigger: 'item', formatter: (p) => `유가: ${p.value[0]}<br/>환율: ${p.value[1]}` }, xAxis: { type: 'value', name: 'WTI 유가', scale: true }, yAxis: { type: 'value', name: 'USD/KRW 환율', scale: true }, series: [{ symbolSize: 8, data: currentData.map(d => [d.oil, d.usdkrw]), type: 'scatter' }] });
+            scatterPlot.setOption({
+                grid: { containLabel: true },
+                tooltip: { trigger: 'item', formatter: (p) => `유가: ${p.value[0]}<br/>환율: ${p.value[1]}` },
+                xAxis: { type: 'value', name: INDICATORS.oil.name, scale: true },
+                yAxis: { type: 'value', name: INDICATORS.usdkrw.name, scale: true },
+                series: [{ symbolSize: 8, data: currentData.map(d => [d.oil, d.usdkrw]), type: 'scatter' }]
+            });
         } else { scatterPlot.clear(); }
     }
 
@@ -244,10 +233,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const tableBody = document.querySelector('#data-table tbody'); const tableHead = document.querySelector('#data-table thead');
         tableBody.innerHTML = ''; tableHead.innerHTML = ''; if (currentData.length === 0) return;
         const headers = ['date', ...availableIndicators];
-        const headerRow = document.createElement('tr'); headers.forEach(key => { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); });
+        const headerRow = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); }});
         tableHead.appendChild(headerRow);
         const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
-        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = (value !== null) ? (INDICATORS[key].format ? INDICATORS[key].format(value) : value) : 'N/A'; row.appendChild(cell); }); tableBody.appendChild(row); });
+        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = (value !== null && value !== undefined) ? (INDICATORS[key].format ? INDICATORS[key].format(value) : value) : 'N/A'; row.appendChild(cell); }}); tableBody.appendChild(row); });
         const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
         document.getElementById('page-info').textContent = `Page ${currentPage} of ${maxPage}`;
         document.getElementById('prev-page').disabled = currentPage === 1;
