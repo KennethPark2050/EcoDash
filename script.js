@@ -105,6 +105,8 @@ document.addEventListener('DOMContentLoaded', function () {
         refreshBtn.addEventListener('click', () => updateDashboard());
     }
 
+    // script.js 파일의 loadAndInitializeDashboard 함수만 이 코드로 교체하세요.
+
     async function loadAndInitializeDashboard() {
         const marketKey = marketApiKeyInput.value.trim();
         if (!marketKey) { alert('Alpha Vantage API 키를 입력해야 합니다.'); return; }
@@ -112,30 +114,48 @@ document.addEventListener('DOMContentLoaded', function () {
         loadingOverlay.classList.remove('hidden');
 
         try {
-            const dataPromises = {
-                sp500: fetchAlphaData(marketKey, 'TIME_SERIES_DAILY_ADJUSTED', { symbol: 'SPY' }),
-                nasdaq: fetchAlphaData(marketKey, 'TIME_SERIES_DAILY_ADJUSTED', { symbol: 'QQQ' }),
-                usdkrw: fetchAlphaData(marketKey, 'FX_DAILY', { from_symbol: 'USD', to_symbol: 'KRW' }),
-                oil: fetchAlphaData(marketKey, 'WTI', { interval: 'daily' }),
-                bond10y: fetchAlphaData(marketKey, 'TREASURY_YIELD', { interval: 'daily', maturity: '10year' }),
-                bond2y: fetchAlphaData(marketKey, 'TREASURY_YIELD', { interval: 'daily', maturity: '2year' }),
+            const dataEndpoints = {
+                sp500: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'SPY' } },
+                nasdaq: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'QQQ' } },
+                usdkrw: { func: 'FX_DAILY', params: { from_symbol: 'USD', to_symbol: 'KRW' } },
+                oil: { func: 'WTI', params: { interval: 'daily' } },
+                bond10y: { func: 'TREASURY_YIELD', params: { interval: 'daily', maturity: '10year' } },
+                bond2y: { func: 'TREASURY_YIELD', params: { interval: 'daily', maturity: '2year' } },
             };
-            
-            // Promise.allSettled를 사용하여 일부가 실패해도 나머지는 처리
-            const results = await Promise.allSettled(Object.values(dataPromises));
+
             const dataStreams = {};
-            results.forEach((result, index) => {
-                const key = Object.keys(dataPromises)[index];
-                if (result.status === 'fulfilled' && result.value.length > 0) {
-                    console.log(`✅ ${key} 데이터 로딩 성공`);
-                    dataStreams[key] = result.value;
-                } else {
-                    console.error(`❌ ${key} 데이터 로딩 실패:`, result.reason || '데이터 없음');
+            const availableIndicators = [];
+
+            // Promise.all 대신 for...of 루프를 사용하여 순차적으로 호출
+            for (const key in dataEndpoints) {
+                console.log(`[Requesting] ${key}...`);
+                try {
+                    // 각 요청 사이에 13초의 지연 시간을 주어 분당 5회 제한을 준수
+                    await new Promise(resolve => setTimeout(resolve, 13000)); 
+                    
+                    const endpoint = dataEndpoints[key];
+                    const result = await fetchAlphaData(marketKey, endpoint.func, endpoint.params);
+                    
+                    if (result.length > 0) {
+                        console.log(`✅ ${key} 데이터 로딩 성공`);
+                        dataStreams[key] = result;
+                        availableIndicators.push(key);
+                    } else {
+                        console.warn(`⚠️ ${key} 데이터는 비어있습니다.`);
+                    }
+                } catch (error) {
+                    console.error(`❌ ${key} 데이터 로딩 실패:`, error);
                 }
-            });
+            }
+            
+            if (availableIndicators.length === 0) {
+                throw new Error("모든 API에서 데이터를 가져오는 데 실패했습니다. API 키나 네트워크를 확인해주세요.");
+            }
             
             fullData = mergeData(dataStreams);
-            if (fullData.length === 0) throw new Error("유효한 데이터를 하나도 가져오지 못했습니다. API 키나 호출 한도를 확인해주세요.");
+            if (fullData.length === 0) {
+                throw new Error("유효한 데이터를 병합하는 데 실패했습니다.");
+            }
             
             setupDashboardUI();
             updateDashboard();
