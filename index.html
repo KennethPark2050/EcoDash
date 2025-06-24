@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>글로벌 시장 분석 대시보드</title>
+    <title>글로벌 거시 경제 대시보드</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -30,7 +30,7 @@
     
     <div id="dashboard-main-container" class="dashboard-container hidden">
         <header class="control-bar">
-            <div class="logo"><h1>🌎 글로벌 시장 분석 대시보드</h1></div>
+            <div class="logo"><h1>🌎 글로벌 거시 경제 대시보드</h1></div>
             <div class="controls">
                 <div class="control-group"><label for="date-range">기간 선택:</label><input type="text" id="date-range"></div>
                 <button id="refresh-btn">🔄 기간 적용</button>
@@ -38,17 +38,16 @@
         </header>
 
         <section class="kpi-cards">
-            <div class="card" id="kpi-sp500"><div class="card-content"><p class="title">S&P 500 (SPY)</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div></div>
-            <div class="card" id="kpi-nasdaq"><div class="card-content"><p class="title">Nasdaq 100 (QQQ)</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div></div>
             <div class="card" id="kpi-oil"><div class="card-content"><p class="title">WTI 유가</p><h2 class="value">$--.--</h2><p class="change">-.--%</p></div></div>
-            <div class="card" id="kpi-bond10y"><div class="card-content"><p class="title">美 국채 10년 금리</p><h2 class="value">-.--%</h2><p class="change">-.--p</p></div></div>
             <div class="card" id="kpi-usdkrw"><div class="card-content"><p class="title">USD/KRW 환율</p><h2 class="value">-,---.--</h2><p class="change">-.--%</p></div></div>
+            <div class="card" id="kpi-bond10y"><div class="card-content"><p class="title">美 국채 10년 금리</p><h2 class="value">-.--%</h2><p class="change">-.--p</p></div></div>
+            <div class="card" id="kpi-bond2y"><div class="card-content"><p class="title">美 국채 2년 금리</p><h2 class="value">-.--%</h2><p class="change">-.--p</p></div></div>
         </section>
 
         <main class="main-chart-area">
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3>주요 자산 시계열 비교</h3>
+                    <h3>주요 거시 지표 비교</h3>
                     <div class="control-group" id="indicator-toggles"></div>
                 </div>
                 <div id="main-timeseries-chart" class="chart-body"></div>
@@ -61,7 +60,7 @@
                 <div id="yield-spread-chart" class="chart-body"></div>
             </div>
             <div class="chart-container">
-                <div class="chart-header"><h3>S&P 500 vs WTI 유가</h3></div>
+                <div class="chart-header"><h3>유가 vs 환율 상관관계</h3></div>
                 <div id="scatter-plot" class="chart-body"></div>
             </div>
         </aside>
