@@ -1,27 +1,39 @@
-// script.js (최종 호출 방식 검증용 - 전체 코드)
+// script.js (최종 M2 단일 호출 테스트용 - 전체 코드)
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log("DOM 로드 완료. ECOS API 최종 테스트 시작.");
+    console.log("DOM 로드 완료. ECOS API 최종 M2 테스트 시작.");
+
+    // --- CONFIGURATION (M2 테스트용으로 극단적 단순화) ---
+    const INDICATORS = {
+        date: { name: '날짜' },
+        m2_raw: { name: 'M2 통화량(십억)', color: '#AF52DE', format: (v) => v.toLocaleString() },
+    };
+    const ECOS_CODES = {
+        // M2(광의통화, 평잔, 원계열) - 가장 확실한 코드 조합
+        m2_raw: { statcode: '101Y002', itemcode: 'BBMA01', cycle: 'M' },
+    };
 
     // --- DOM ELEMENTS ---
     const loadingOverlay = document.getElementById('loading-overlay');
     const apiKeySection = document.getElementById('api-key-section');
     const dashboardContainer = document.getElementById('dashboard-main-container');
     const ecosApiKeyInput = document.getElementById('ecos-api-key');
+    const marketApiKeyInput = document.getElementById('market-api-key'); // HTML에는 없지만 에러 방지용
     const loadDataBtn = document.getElementById('load-data-btn');
     const resultLogEl = document.getElementById('result-log');
     const testCardValueEl = document.querySelector('#kpi-test_data .value');
     
-    // --- ECOS_CODES (100% 동작 보장 코드로 단일화) ---
-    const ECOS_CODES = {
-        reserve_base_money: { statcode: '102Y004', itemcode: 'BMAA01', cycle: 'M' },
-    };
-
     // --- API & DATA HANDLING ---
     async function fetchEcosData(apiKey, codeInfo, startDate, endDate) {
-        const params = new URLSearchParams({ apikey: apiKey, statcode: codeInfo.statcode, cycle: codeInfo.cycle, start: startDate, end: endDate, itemcode: codeInfo.itemcode });
-        // Vercel 환경에서는 /api/ecos 경로를 사용
-        const url = `/api/ecos?${params.toString()}`; 
+        const params = new URLSearchParams({
+            apikey: apiKey,
+            statcode: codeInfo.statcode,
+            cycle: codeInfo.cycle,
+            start: startDate,
+            end: endDate,
+            itemcode: codeInfo.itemcode
+        });
+        const url = `/api/ecos?${params.toString()}`;
         
         console.log(`Requesting ECOS: ${url.replace(apiKey, 'REDACTED')}`);
         
@@ -32,7 +44,6 @@ document.addEventListener('DOMContentLoaded', function () {
         
         const data = await response.json();
         if (data.error) {
-            // 서버에서 보낸 에러 메시지를 그대로 throw
             throw new Error(`[API Error] ${data.details || data.error}`);
         }
 
@@ -42,13 +53,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 value: parseFloat(item.DATA_VALUE) 
             }));
         }
-        
-        // 데이터가 없는 경우
-        return []; 
+        return [];
     }
     
     // --- INITIALIZATION & EVENT LISTENERS ---
     function init() {
+        if (!loadDataBtn) {
+            console.error("CRITICAL: '데이터 불러오기' 버튼을 찾을 수 없습니다.");
+            return;
+        }
         ecosApiKeyInput.value = localStorage.getItem('ecosApiKey') || '';
         loadDataBtn.addEventListener('click', runFinalTest);
     }
@@ -62,24 +75,28 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         localStorage.setItem('ecosApiKey', ecosKey);
         loadingOverlay.classList.remove('hidden');
-        resultLogEl.textContent = 'API 호출을 시작합니다...';
+        if (resultLogEl) resultLogEl.textContent = 'ECOS API 호출을 시작합니다...';
 
         try {
             const today = new Date();
             const ecosMonthlyEndDate = today.toISOString().slice(0, 7).replace('-', '');
             today.setFullYear(today.getFullYear() - 5);
             const ecosMonthlyStartDate = today.toISOString().slice(0, 7).replace('-', '');
-
-            const testData = await fetchEcosData(ecosKey, ECOS_CODES.reserve_base_money, ecosMonthlyStartDate, ecosMonthlyEndDate);
+            
+            // 오직 M2 데이터 하나만 요청
+            const testData = await fetchEcosData(ecosKey, ECOS_CODES.m2_raw, ecosMonthlyStartDate, ecosMonthlyEndDate);
 
             if (testData.length > 0) {
-                console.log('✅ ECOS 데이터 로딩 성공!', testData);
-                resultLogEl.textContent = '✅ ECOS API 호출 성공!\n\n';
-                resultLogEl.textContent += `가져온 데이터 개수: ${testData.length}\n`;
-                resultLogEl.textContent += `최신 데이터: ${testData[testData.length - 1].date} / ${testData[testData.length - 1].value.toLocaleString()}`;
-                testCardValueEl.textContent = testData[testData.length-1].value.toLocaleString();
+                console.log('✅ ECOS (M2) 데이터 로딩 성공!', testData);
+                if (resultLogEl) {
+                    resultLogEl.textContent = '✅ ECOS API 호출 성공!\n\n';
+                    resultLogEl.textContent += `가져온 데이터 개수: ${testData.length}\n`;
+                    resultLogEl.textContent += `최신 데이터: ${testData[testData.length - 1].date} / ${testData[testData.length - 1].value.toLocaleString()}`;
+                }
+                if(testCardValueEl) testCardValueEl.textContent = testData[testData.length-1].value.toLocaleString();
             } else {
-                throw new Error("API 호출은 성공했으나, 반환된 데이터가 없습니다.");
+                // 이 경우는 "해당하는 데이터가 없습니다" 와 같은 응답
+                throw new Error("API 호출은 성공했으나, ECOS 서버가 빈 데이터를 반환했습니다. (정보-200)");
             }
             
             apiKeySection.classList.add('hidden');
@@ -87,7 +104,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         } catch (error) {
             console.error('❌ ECOS 데이터 로딩 실패:', error);
-            resultLogEl.textContent = `❌ ECOS API 호출 실패!\n\n에러 메시지: ${error.message}`;
+            if (resultLogEl) {
+                resultLogEl.textContent = `❌ ECOS API 호출 실패!\n\n에러 메시지: ${error.message}`;
+            }
+            if (testCardValueEl) {
+                document.querySelector('#kpi-test_data .title').textContent = "호출 실패";
+                testCardValueEl.textContent = "Error";
+            }
             apiKeySection.classList.add('hidden');
             dashboardContainer.classList.remove('hidden');
         } finally {

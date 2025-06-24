@@ -20,7 +20,6 @@
                 <label for="ecos-api-key">한국은행(ECOS) API 키</label>
                 <input type="password" id="ecos-api-key" placeholder="ECOS API 키를 여기에 붙여넣으세요">
             </div>
-            <!-- Alpha Vantage 키 입력창 임시 제거 -->
             <button id="load-data-btn">데이터 불러오기</button>
         </div>
     </div>
@@ -33,7 +32,7 @@
         <section class="kpi-cards">
             <div class="card" id="kpi-test_data">
                 <div class="card-content">
-                    <p class="title">본원통화 데이터</p>
+                    <p class="title">M2 통화량 데이터</p>
                     <h2 class="value">-,---.--</h2>
                     <p class="change">--</p>
                 </div>
@@ -43,7 +42,7 @@
         <main class="main-chart-area full-width">
              <div class="chart-container">
                 <div class="chart-header"><h3>데이터 로드 결과</h3></div>
-                <div id="result-log" class="chart-body" style="padding: 20px; white-space: pre-wrap;"></div>
+                <div id="result-log" class="chart-body" style="padding: 20px; white-space: pre-wrap; font-family: monospace;"></div>
             </div>
         </main>
     </div>
