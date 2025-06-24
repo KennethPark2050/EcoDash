@@ -6,12 +6,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- CONFIGURATION (무료 API 기반) ---
     const INDICATORS = {
         date: { name: '날짜' },
+        sp500: { name: 'S&P 500 (SPY)', color: '#007AFF', yAxisIndex: 0, format: (v) => v.toFixed(2) },
+        nasdaq: { name: 'Nasdaq 100 (QQQ)', color: '#5856D6', yAxisIndex: 0, format: (v) => v.toFixed(2) },
         oil: { name: 'WTI 유가', color: '#AF52DE', yAxisIndex: 0, format: (v) => `$${v.toFixed(2)}` },
         bond10y: { name: '美 국채 10Y', color: '#FF3B30', yAxisIndex: 1, format: (v) => `${v.toFixed(2)}%` },
         bond2y: { name: '美 국채 2Y', color: '#FF9500', yAxisIndex: 1, format: (v) => `${v.toFixed(2)}%` },
         usdkrw: { name: 'USD/KRW 환율', color: '#34C759', yAxisIndex: 0, format: (v) => v.toFixed(2) },
     };
-    const MAIN_CHART_INDICATORS = ['oil', 'bond10y', 'usdkrw'];
+    const MAIN_CHART_INDICATORS = ['sp500', 'oil', 'bond10y', 'usdkrw'];
     const TABLE_PAGE_SIZE = 10;
 
     // --- STATE, DOM, CHART Instances ---
@@ -36,27 +38,22 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- API & DATA HANDLING ---
     async function fetchAlphaData(apiKey, func, params = {}) {
         let queryString = `function=${func}&apikey=${apiKey}`;
-        for (const key in params) {
-            queryString += `&${key}=${params[key]}`;
-        }
+        for (const key in params) { queryString += `&${key}=${params[key]}`; }
         const url = `https://www.alphavantage.co/query?${queryString}`;
-        console.log(`Requesting Alpha Vantage DIRECTLY: ${url.replace(apiKey, 'REDACTED')}`);
-
+        console.log(`Requesting Alpha Vantage DIRECTLY: ${func}`);
         const response = await fetch(url);
         if (!response.ok) throw new Error(`API 서버가 상태 코드 ${response.status}(으)로 응답했습니다.`);
         const data = await response.json();
         if (data['Error Message'] || data['Information']) { throw new Error(`[API Error] ${data['Error Message'] || data['Information']}`); }
-
         const timeSeriesKey = Object.keys(data).find(k => k.includes('data') || k.includes('Daily'));
         if (!timeSeriesKey || !data[timeSeriesKey]) { throw new Error('API 응답에서 유효한 데이터 시리즈를 찾을 수 없습니다.'); }
-        
         const seriesData = data[timeSeriesKey];
-        if (Array.isArray(seriesData)) { // 경제 지표
+        if (Array.isArray(seriesData)) {
             return seriesData.map(item => ({ date: item.date, value: parseFloat(item.value) || null })).reverse();
-        } else { // 환율
+        } else {
             return Object.keys(seriesData).map(date => {
                 const entry = seriesData[date];
-                const closeKey = Object.keys(entry).find(k => k.includes('close'));
+                const closeKey = Object.keys(entry).find(k => k.includes('adjusted close') || k.includes('close'));
                 return { date: date, value: parseFloat(entry[closeKey]) || null };
             });
         }
@@ -104,6 +101,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             const dataEndpoints = {
+                sp500: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'SPY' } },
+                nasdaq: { func: 'TIME_SERIES_DAILY_ADJUSTED', params: { symbol: 'QQQ' } },
                 usdkrw: { func: 'FX_DAILY', params: { from_symbol: 'USD', to_symbol: 'KRW' } },
                 oil: { func: 'WTI', params: { interval: 'daily' } },
                 bond10y: { func: 'TREASURY_YIELD', params: { interval: 'daily', maturity: '10year' } },
@@ -115,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function () {
             for (const key in dataEndpoints) {
                 console.log(`[Requesting] ${key}...`);
                 try {
-                    await new Promise(resolve => setTimeout(resolve, 13000)); 
+                    await new Promise(resolve => setTimeout(resolve, 13000));
                     const endpoint = dataEndpoints[key];
                     const result = await fetchAlphaData(marketKey, endpoint.func, endpoint.params);
                     if (result.length > 0) {
@@ -123,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         dataStreams[key] = result;
                         availableIndicators.push(key);
                     } else { console.warn(`⚠️ ${key} 데이터는 비어있습니다.`); }
-                } catch (error) { console.error(`❌ ${key} 데이터 로딩 실패:`, error); }
+                } catch (error) { console.error(`❌ ${key} 데이터 로딩 실패:`, error.message); }
             }
             
             if (availableIndicators.length === 0) throw new Error("모든 API에서 데이터를 가져오는 데 실패했습니다. API 키나 네트워크를 확인해주세요.");
@@ -144,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
-    // --- UI UPDATE FUNCTIONS ---
+    // --- UI UPDATE FUNCTIONS (Final Version) ---
     function setupDashboardUI() {
         indicatorTogglesEl.innerHTML = '';
         MAIN_CHART_INDICATORS.forEach(key => {
@@ -155,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
         indicatorTogglesEl.querySelectorAll('input').forEach(toggle => toggle.addEventListener('change', updateMainChart));
+        
         const lastDate = fullData[fullData.length - 1].date;
         const oneYearAgo = new Date(lastDate);
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
@@ -174,6 +174,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function updateKpiCards() {
+        if (currentData.length === 0) return;
         const latest = currentData[currentData.length - 1];
         const prev = currentData.length > 1 ? currentData[currentData.length - 2] : latest;
         availableIndicators.forEach(key => {
@@ -199,33 +200,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateMainChart() {
         const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value);
-        const series = selectedIndicators
-            .filter(key => availableIndicators.includes(key))
-            .map(key => ({
-                name: INDICATORS[key].name,
-                type: 'line',
-                yAxisIndex: INDICATORS[key].yAxisIndex,
-                data: currentData.map(d => d[key]),
-                showSymbol: false,
-                color: INDICATORS[key].color
-            }));
-        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 10 }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price / Index', position: 'left' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
+        const series = selectedIndicators.filter(key => availableIndicators.includes(key)).map(key => ({
+            name: INDICATORS[key].name,
+            type: 'line',
+            yAxisIndex: INDICATORS[key].yAxisIndex,
+            data: currentData.map(d => d[key]),
+            showSymbol: false,
+            color: INDICATORS[key].color
+        }));
+        mainChart.setOption({ tooltip: { trigger: 'axis' }, legend: { data: series.map(s => s.name), top: 'auto' }, grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true }, xAxis: { type: 'category', data: currentData.map(d => d.date) }, yAxis: [{ type: 'value', name: 'Price / Index' }, { type: 'value', name: 'Yield (%)', position: 'right' }], series: series, dataZoom: [{ type: 'inside' }, { type: 'slider' }] }, true);
     }
     
     function updateSubCharts() {
         if (availableIndicators.includes('bond10y') && availableIndicators.includes('bond2y')) {
             const yieldSpreadData = currentData.map(d => ({ date: d.date, value: d.bond10y - d.bond2y }));
-            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)' }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value ? d.value.toFixed(2) : null), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
+            yieldSpreadChart.setOption({ tooltip: { trigger: 'axis' }, grid: { left: '15%', right: '5%', bottom: '10%', top: '15%' }, xAxis: { type: 'category', data: yieldSpreadData.map(d => d.date) }, yAxis: { type: 'value', name: 'Spread (%)' }, series: [{ name: '10Y-2Y', type: 'line', showSymbol: false, data: yieldSpreadData.map(d => d.value ? d.value.toFixed(2) : null), areaStyle: { opacity: 0.3 }, markLine: { data: [{ yAxis: 0, lineStyle: { color: '#888', type: 'dashed' }}], symbol: 'none' } }] });
         } else { yieldSpreadChart.clear(); }
         
         if (availableIndicators.includes('oil') && availableIndicators.includes('usdkrw')) {
-            scatterPlot.setOption({
-                grid: { containLabel: true },
-                tooltip: { trigger: 'item', formatter: (p) => `유가: ${p.value[0]}<br/>환율: ${p.value[1]}` },
-                xAxis: { type: 'value', name: INDICATORS.oil.name, scale: true },
-                yAxis: { type: 'value', name: INDICATORS.usdkrw.name, scale: true },
-                series: [{ symbolSize: 8, data: currentData.map(d => [d.oil, d.usdkrw]), type: 'scatter' }]
-            });
+            scatterPlot.setOption({ grid: { containLabel: true }, tooltip: { trigger: 'item', formatter: (p) => `유가: ${p.value[0]}<br/>환율: ${p.value[1]}` }, xAxis: { type: 'value', name: INDICATORS.oil.name, scale: true }, yAxis: { type: 'value', name: INDICATORS.usdkrw.name, scale: true }, series: [{ symbolSize: 8, data: currentData.map(d => [d.oil, d.usdkrw]), type: 'scatter' }] });
         } else { scatterPlot.clear(); }
     }
 
@@ -236,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const headerRow = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const th = document.createElement('th'); th.textContent = INDICATORS[key].name; headerRow.appendChild(th); }});
         tableHead.appendChild(headerRow);
         const pageData = currentData.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
-        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = (value !== null && value !== undefined) ? (INDICATORS[key].format ? INDICATORS[key].format(value) : value) : 'N/A'; row.appendChild(cell); }}); tableBody.appendChild(row); });
+        pageData.forEach(rowData => { const row = document.createElement('tr'); headers.forEach(key => { if(INDICATORS[key]) { const cell = document.createElement('td'); const value = rowData[key]; cell.textContent = (value !== null && value !== undefined) ? (INDICATORS[key].format(value)) : 'N/A'; row.appendChild(cell); }}); tableBody.appendChild(row); });
         const maxPage = Math.ceil(currentData.length / TABLE_PAGE_SIZE);
         document.getElementById('page-info').textContent = `Page ${currentPage} of ${maxPage}`;
         document.getElementById('prev-page').disabled = currentPage === 1;
