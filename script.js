@@ -185,22 +185,43 @@ document.addEventListener('DOMContentLoaded', function () {
         updateDataTable();
     }
     
+ // script.js 파일의 updateKpiCards 함수만 이 코드로 교체하세요.
+
     function updateKpiCards() {
         const latest = currentData[currentData.length - 1];
         const prev = currentData.length > 1 ? currentData[currentData.length - 2] : latest;
-        availableIndicators.forEach(key => {
+
+        // availableIndicators 대신, 현재 데이터에 있는 모든 키를 순회합니다.
+        Object.keys(latest).forEach(key => {
+            if (key === 'date' || latest[key] === null) return;
+
+            // HTML id와 일치하는지 확인
             const cardEl = document.getElementById(`kpi-${key}`);
-            if (!cardEl || latest[key] === null) return;
+            if (!cardEl) return;
+
             const value = latest[key];
-            cardEl.querySelector('.value').textContent = INDICATORS[key].format(value);
-            if (prev[key] !== null) {
+            const indicatorConfig = INDICATORS[key];
+
+            // 1. 값 표시 (포맷에 맞춰서)
+            cardEl.querySelector('.value').textContent = indicatorConfig.format(value);
+
+            // 2. 등락률/등락폭 표시
+            if (prev && prev[key] !== null) {
                 const change = value - prev[key];
-                const percent = (value / prev[key] - 1) * 100;
-                cardEl.querySelector('.change').textContent = key.includes('bond') ? `${change.toFixed(3)}p` : `${percent.toFixed(2)}%`;
+                
+                if (key.includes('bond')) { // 국채 금리일 경우
+                    cardEl.querySelector('.change').textContent = `${change.toFixed(3)}p`;
+                } else { // 그 외 (환율, 유가)
+                    const percent = (value / prev[key] - 1) * 100;
+                    cardEl.querySelector('.change').textContent = `${percent.toFixed(2)}%`;
+                }
                 cardEl.querySelector('.change').className = `change ${change >= 0 ? 'positive' : 'negative'}`;
+            } else {
+                cardEl.querySelector('.change').textContent = '--';
             }
         });
     }
+
 
     function updateMainChart() {
         const selectedIndicators = Array.from(document.querySelectorAll('#indicator-toggles input:checked')).map(cb => cb.value);
