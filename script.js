@@ -34,10 +34,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const scatterPlot = echarts.init(document.getElementById('scatter-plot'));
 
     // --- API & DATA HANDLING ---
+    // script.js 파일의 fetchAlphaData 함수만 이 코드로 교체하세요.
+
     async function fetchAlphaData(apiKey, func, params = {}) {
-        // Vercel 환경이므로 /api/alpha 프록시를 통해 호출
-        const queryParams = new URLSearchParams({ func, apikey: apiKey, ...params });
-        const url = `/api/alpha?${queryParams.toString()}`;
+        // URLSearchParams 대신 직접 문자열 조합 방식으로 변경
+        let queryString = `function=${func}&apikey=${apiKey}`;
+        for (const key in params) {
+            queryString += `&${key}=${params[key]}`;
+        }
+        
+        // Vercel 프록시를 통해 호출
+        const url = `/api/alpha?${queryString}`;
         
         console.log(`Requesting Alpha Vantage: ${func} with params`, params);
 
@@ -45,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!response.ok) throw new Error(`API 서버가 상태 코드 ${response.status}(으)로 응답했습니다.`);
         
         const data = await response.json();
-        // Vercel 프록시에서 보낸 에러 처리
         if (data.error) throw new Error(`[API Error] ${data.details['Error Message'] || data.details['Information'] || data.error}`);
 
         const timeSeriesKey = Object.keys(data).find(k => k.includes('data') || k.includes('Daily'));
@@ -54,16 +60,16 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         
         const seriesData = data[timeSeriesKey];
-        if (Array.isArray(seriesData)) { // 경제 지표 (CPI, 금리 등)
+        if (Array.isArray(seriesData)) {
             return seriesData.map(item => ({ date: item.date, value: parseFloat(item.value) || null })).reverse();
-        } else { // 환율
+        } else {
             return Object.keys(seriesData).map(date => {
                 const entry = seriesData[date];
                 const closeKey = Object.keys(entry).find(k => k.includes('close'));
                 return { date: date, value: parseFloat(entry[closeKey]) || null };
             });
         }
-    }
+    } 
 
     function mergeData(dataStreams) {
         const dataMap = new Map();
